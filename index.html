@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#f5c84c">
+  <meta name="description" content="A static PWA satellite tracker with pass predictions, sky plots, and map tracking.">
+  <title>sa-trackr</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon-192.png" sizes="192x192" type="image/png">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+  <link rel="stylesheet" href="styles.css?v=1">
+  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/satellite.js/6.0.0/satellite.min.js"></script>
+  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <script defer src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+  <script defer src="script.js?v=1"></script>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <button class="icon-button back-button" id="backButton" type="button" aria-label="Back" hidden>
+        <i data-lucide="arrow-left" aria-hidden="true"></i>
+      </button>
+      <div class="brand">
+        <span class="brand-mark">SA</span>
+        <div class="brand-copy">
+          <h1>sa-trackr</h1>
+          <p id="statusLine">Loading satellite catalog</p>
+        </div>
+      </div>
+      <div class="top-actions">
+        <button class="icon-button" id="refreshButton" type="button" aria-label="Refresh satellite list">
+          <i data-lucide="refresh-cw" aria-hidden="true"></i>
+        </button>
+        <button class="icon-button" id="mapButton" type="button" aria-label="Open satellite map" hidden>
+          <i data-lucide="map" aria-hidden="true"></i>
+        </button>
+        <button class="icon-button" id="favoritesToggle" type="button" aria-label="Show favorites">
+          <i data-lucide="star" aria-hidden="true"></i>
+        </button>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <aside class="control-panel" aria-label="Observer settings">
+        <section class="panel-section">
+          <div class="section-heading">
+            <h2>Observer</h2>
+            <button class="small-button" id="useDeviceButton" type="button">
+              <i data-lucide="crosshair" aria-hidden="true"></i>
+              Use device
+            </button>
+          </div>
+          <div class="coordinate-grid">
+            <label>
+              Latitude
+              <input id="latitudeInput" type="number" inputmode="decimal" min="-90" max="90" step="0.0001" autocomplete="off">
+            </label>
+            <label>
+              Longitude
+              <input id="longitudeInput" type="number" inputmode="decimal" min="-180" max="180" step="0.0001" autocomplete="off">
+            </label>
+            <label>
+              Altitude, m
+              <input id="altitudeInput" type="number" inputmode="numeric" min="-500" max="9000" step="1" autocomplete="off">
+            </label>
+          </div>
+        </section>
+
+        <section class="panel-section">
+          <div class="section-heading">
+            <h2>Set on map</h2>
+            <span class="quiet">Click to move</span>
+          </div>
+          <div id="locationMap" class="location-map" role="application" aria-label="Observer location map"></div>
+        </section>
+
+        <section class="panel-section">
+          <div class="section-heading">
+            <h2>Catalog</h2>
+            <span class="quiet" id="cacheStamp">No cache yet</span>
+          </div>
+          <label class="source-label">
+            Source group
+            <select id="sourceSelect">
+              <option value="focused">Focused catalog</option>
+              <option value="weather">Weather and NOAA</option>
+              <option value="radio">Amateur radio</option>
+              <option value="earth">Earth observation</option>
+              <option value="active">Active catalog</option>
+            </select>
+          </label>
+        </section>
+      </aside>
+
+      <section class="content-panel" aria-live="polite">
+        <section class="view is-active" id="listView" aria-label="Satellite list">
+          <div class="list-tools">
+            <label class="search-wrap">
+              <i data-lucide="search" aria-hidden="true"></i>
+              <input id="searchInput" type="search" placeholder="Search satellites" autocomplete="off">
+            </label>
+            <span class="result-count" id="listCount">0 satellites</span>
+          </div>
+          <div class="view-title">
+            <h2 id="listTitle">Satellites A-Z</h2>
+            <span id="listHint">Select a satellite for passes</span>
+          </div>
+          <ul class="satellite-list" id="satelliteList"></ul>
+          <button class="wide-button" id="loadMoreButton" type="button">Load more</button>
+        </section>
+
+        <section class="view" id="passesView" aria-label="Satellite passes" hidden>
+          <div class="selected-head">
+            <div>
+              <span class="eyebrow" id="selectedNorad">NORAD</span>
+              <h2 id="selectedName">Satellite</h2>
+            </div>
+            <button class="favorite-pill" id="selectedFavorite" type="button">
+              <i data-lucide="star" aria-hidden="true"></i>
+              Favorite
+            </button>
+          </div>
+
+          <div class="filter-row">
+            <label>
+              Minimum elevation
+              <input id="minElevationInput" type="number" min="0" max="90" step="1">
+            </label>
+            <input id="minElevationRange" type="range" min="0" max="90" step="1">
+          </div>
+
+          <div class="pager" data-pager="top">
+            <button class="pager-button" type="button" data-range-action="previous">
+              <i data-lucide="chevrons-left" aria-hidden="true"></i>
+              Previous 2 days
+            </button>
+            <span class="range-label" id="rangeLabelTop">Today and tomorrow</span>
+            <button class="pager-button" type="button" data-range-action="next">
+              Next 2 days
+              <i data-lucide="chevrons-right" aria-hidden="true"></i>
+            </button>
+          </div>
+
+          <div class="table-shell">
+            <table class="passes-table">
+              <thead>
+                <tr>
+                  <th>Pass date</th>
+                  <th>Start</th>
+                  <th>Max elevation</th>
+                  <th>End</th>
+                </tr>
+              </thead>
+              <tbody id="passesBody"></tbody>
+            </table>
+          </div>
+
+          <div class="empty-state" id="passesEmpty" hidden>No passes match this elevation filter in the loaded days.</div>
+
+          <div class="pager" data-pager="bottom">
+            <button class="pager-button" type="button" data-range-action="previous">
+              <i data-lucide="chevrons-left" aria-hidden="true"></i>
+              Previous 2 days
+            </button>
+            <span class="range-label" id="rangeLabelBottom">Today and tomorrow</span>
+            <button class="pager-button" type="button" data-range-action="next">
+              Next 2 days
+              <i data-lucide="chevrons-right" aria-hidden="true"></i>
+            </button>
+          </div>
+        </section>
+
+        <section class="view" id="skyView" aria-label="Pass sky plot" hidden>
+          <div class="pass-summary">
+            <div>
+              <span class="eyebrow" id="skyDate">Pass</span>
+              <h2 id="skyTitle">Sky path</h2>
+            </div>
+            <div class="countdown" id="countdownText">Starts in --:--:--</div>
+          </div>
+          <svg class="sky-plot" id="skyPlot" viewBox="0 0 420 420" role="img" aria-label="Sky plot with north at the top, east at the right, south at the bottom, and west at the left">
+            <defs>
+              <marker id="pathArrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+                <path d="M0,0 L0,6 L9,3 z"></path>
+              </marker>
+            </defs>
+            <circle class="sky-ring outer" cx="210" cy="210" r="168"></circle>
+            <circle class="sky-ring middle" cx="210" cy="210" r="112"></circle>
+            <circle class="sky-ring inner" cx="210" cy="210" r="56"></circle>
+            <line class="sky-axis" x1="210" y1="42" x2="210" y2="378"></line>
+            <line class="sky-axis" x1="42" y1="210" x2="378" y2="210"></line>
+            <text class="sky-label cardinal" x="210" y="28">N</text>
+            <text class="sky-label cardinal" x="210" y="408">S</text>
+            <text class="sky-label cardinal" x="398" y="216">E</text>
+            <text class="sky-label cardinal" x="22" y="216">W</text>
+            <text class="sky-label" x="218" y="210">90°</text>
+            <text class="sky-label" x="218" y="54">0°</text>
+            <polyline class="sky-path" id="skyPath" points=""></polyline>
+            <circle class="current-dot" id="currentSkyDot" cx="42" cy="210" r="7" hidden></circle>
+          </svg>
+          <div class="sky-meta" id="skyMeta"></div>
+        </section>
+
+        <section class="view" id="mapView" aria-label="Satellite map" hidden>
+          <div class="map-toolbar">
+            <div>
+              <span class="eyebrow" id="mapSatelliteLabel">Satellite map</span>
+              <h2 id="mapTitle">Current position</h2>
+            </div>
+            <span class="map-clock" id="mapClock">--:--:--</span>
+          </div>
+          <div id="trackMap" class="track-map" role="application" aria-label="Satellite track map"></div>
+          <div class="map-details" id="mapDetails">Waiting for position</div>
+        </section>
+      </section>
+    </main>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+</body>
+</html>
